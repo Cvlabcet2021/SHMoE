@@ -1,1 +1,314 @@
+# ============================================================
+# SHMoE-Dehaze Configuration
+# Semantic and Haze-Aware Mixture-of-Experts
+# ============================================================
 
+project:
+  name: "SHMoE-Dehaze"
+  seed: 42
+  device: "cuda"
+
+# ------------------------------------------------------------
+# Dataset
+# ------------------------------------------------------------
+
+dataset:
+  name: "RESIDE-ITS"
+
+  train:
+    hazy_dir: "./data/RESIDE-ITS/train/hazy"
+    gt_dir: "./data/RESIDE-ITS/train/gt"
+
+  validation:
+    hazy_dir: "./data/RESIDE-ITS/val/hazy"
+    gt_dir: "./data/RESIDE-ITS/val/gt"
+
+  test:
+    hazy_dir: "./data/RESIDE-ITS/test/hazy"
+    gt_dir: "./data/RESIDE-ITS/test/gt"
+
+  image_size: 512
+  crop_size: 512
+
+  num_workers: 4
+  pin_memory: true
+
+# ------------------------------------------------------------
+# SAM-3
+# ------------------------------------------------------------
+
+sam3:
+  enabled: true
+
+  checkpoint: "./pretrained/sam3.pth"
+
+  freeze: true
+
+  feature_dim: 256
+
+# ------------------------------------------------------------
+# Haze-aware Encoder
+# ------------------------------------------------------------
+
+haze_encoder:
+  in_channels: 3
+
+  base_channels: 64
+
+  num_stages: 4
+
+  feature_dims:
+    - 64
+    - 128
+    - 256
+    - 512
+
+# ------------------------------------------------------------
+# Semantic-Haze Cross Attention
+# ------------------------------------------------------------
+
+cross_attention:
+  enabled: true
+
+  embed_dim: 256
+
+  num_heads: 8
+
+  dropout: 0.1
+
+# ------------------------------------------------------------
+# Routing / Gating Network
+# ------------------------------------------------------------
+
+routing:
+  num_experts: 3
+
+  hidden_dim: 128
+
+  temperature: 1.0
+
+  use_softmax: true
+
+  pixel_wise: true
+
+# ------------------------------------------------------------
+# Expert 1 — ASM
+# Light Haze
+# ------------------------------------------------------------
+
+asm:
+  enabled: true
+
+  in_channels: 3
+
+  base_channels: 64
+
+  num_blocks: 6
+
+  output_channels: 3
+
+# ------------------------------------------------------------
+# Expert 2 — MH-Former
+# Medium Haze
+# ------------------------------------------------------------
+
+mhformer:
+  enabled: true
+
+  in_channels: 3
+
+  embed_dim: 256
+
+  num_heads: 8
+
+  num_blocks: 4
+
+  mlp_ratio: 4.0
+
+  dropout: 0.1
+
+  output_channels: 3
+
+# ------------------------------------------------------------
+# Expert 3 — HazeDiff-CPG
+# Heavy Haze
+# ------------------------------------------------------------
+
+hazediff_cpg:
+  enabled: true
+
+  image_channels: 3
+
+  base_channels: 64
+
+  num_res_blocks: 4
+
+  diffusion_timesteps: 1000
+
+  sampling_steps: 50
+
+  sampler: "ddim"
+
+  classifier_free_guidance: true
+
+  guidance_scale: 1.5
+
+  frequency_guidance: true
+
+  mask_guidance: true
+
+  prompt_guidance: true
+
+  physics_guidance: true
+
+# ------------------------------------------------------------
+# MoE Fusion
+# ------------------------------------------------------------
+
+fusion:
+  type: "soft_moe"
+
+  num_experts: 3
+
+  output_channels: 3
+
+# ------------------------------------------------------------
+# Losses
+# ------------------------------------------------------------
+
+loss:
+  reconstruction:
+    enabled: true
+    weight: 1.0
+
+  perceptual:
+    enabled: true
+    weight: 0.1
+
+  physics:
+    enabled: true
+    weight: 0.1
+
+  routing:
+    enabled: true
+    weight: 0.01
+
+  diffusion:
+    enabled: true
+    weight: 1.0
+
+# ------------------------------------------------------------
+# Training
+# ------------------------------------------------------------
+
+training:
+
+  # Stage 1:
+  # Independent pretraining of MH-Former
+  # and HazeDiff-CPG
+
+  stage1:
+    enabled: true
+
+    epochs: 300
+
+    batch_size: 8
+
+    learning_rate: 0.0001
+
+  # Stage 2:
+  # Integrated SHMoE training
+
+  stage2:
+    enabled: true
+
+    epochs: 100
+
+    batch_size: 8
+
+    learning_rate: 0.0001
+
+  optimizer:
+    name: "AdamW"
+
+    betas:
+      - 0.9
+      - 0.999
+
+    weight_decay: 0.01
+
+  scheduler:
+    name: "cosine"
+
+    warmup_epochs: 10
+
+  gradient_clipping:
+    enabled: true
+
+    max_norm: 1.0
+
+  mixed_precision:
+    enabled: true
+
+  ema:
+    enabled: true
+
+    decay: 0.999
+
+# ------------------------------------------------------------
+# Checkpoints
+# ------------------------------------------------------------
+
+checkpoint:
+
+  directory: "./checkpoints"
+
+  save_every: 10
+
+  save_best: true
+
+  monitor: "PSNR"
+
+  mode: "max"
+
+# ------------------------------------------------------------
+# Evaluation
+# ------------------------------------------------------------
+
+evaluation:
+
+  metrics:
+    - "PSNR"
+    - "SSIM"
+
+  test_batch_size: 1
+
+  save_images: true
+
+  output_dir: "./results"
+
+# ------------------------------------------------------------
+# Inference
+# ------------------------------------------------------------
+
+inference:
+
+  image_size: 512
+
+  diffusion_sampling_steps: 50
+
+  sampler: "ddim"
+
+  use_ema: true
+
+# ------------------------------------------------------------
+# Logging
+# ------------------------------------------------------------
+
+logging:
+
+  directory: "./logs"
+
+  print_frequency: 50
+
+  tensorboard: true
